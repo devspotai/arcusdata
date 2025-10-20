@@ -44,3 +44,7 @@ This README would normally document whatever steps are necessary to get your app
 ### Linter Aggregator
  * curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s latest
  * make lint
+
+### Upgrade library in org after pushing to remote
+ * git tag v0.1.0
+ * git push origin v0.1.0
