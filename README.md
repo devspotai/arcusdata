@@ -48,3 +48,8 @@ This README would normally document whatever steps are necessary to get your app
 ### Upgrade library in org after pushing to remote
  * git tag v0.1.0
  * git push origin v0.1.0
+
+### If we want to use this library and local changes only
+ * cd ~/projects/
+ * go work init ./core/devspotai/arcusdata ./serveyourstay/sys-backend-stay-experience
+* go work use ./core/devspotai/arcusdata ./serveyourstay/sys-backend-stay-experience
