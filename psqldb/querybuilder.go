@@ -1,6 +1,7 @@
 package psqldb
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -88,4 +89,14 @@ func (qb *QueryBuilder) GetModifier() string {
 
 func (qb *QueryBuilder) GetModifierArgs() []interface{} {
 	return qb.modifierArgs
+}
+
+func (qb *QueryBuilder) AppendTextArrayOverlapAtLeast(col string, values []string, n int) {
+	qb.Append(fmt.Sprintf("%s && ?::TEXT[]", col), values)
+	qb.Append(fmt.Sprintf(`
+		cardinality(ARRAY(
+			SELECT UNNEST(%s)
+			INTERSECT
+			SELECT UNNEST(?::TEXT[])
+		)) >= ?`, col), values, n)
 }
