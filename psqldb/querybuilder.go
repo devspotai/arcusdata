@@ -100,3 +100,14 @@ func (qb *QueryBuilder) AppendTextArrayOverlapAtLeast(col string, values []strin
 			SELECT UNNEST(?::TEXT[])
 		)) >= ?`, col), values, n)
 }
+
+func (qb *QueryBuilder) AppendProximitySearch(col string, latitude float64, longitude float64, distance float64) {
+	qb.Append(`
+			ST_DWithin(
+				location_geography,
+				ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography,
+				? * 1000
+			)`,
+		latitude, longitude, distance,
+	)
+}

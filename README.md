@@ -46,10 +46,19 @@ This README would normally document whatever steps are necessary to get your app
  * make lint
 
 ### Upgrade library in org after pushing to remote
- * git tag v0.1.0
- * git push origin v0.1.0
+ * git tag -a v0.1.1 -m "Added text array search for TEXT array types"
+ * Or more detail with multi-line info:
+   git tag -a v0.1.1 -m  "Added text array lookup
+  - new helper for amenity intersection
+  - works with any text[] column"
+ * git push origin v0.1.1
 
+### Consumer needs to do:
+ * go get github.com/yourorg/yourlib@v0.1.1
+ * go mod tidy
+ 
 ### If we want to use this library and local changes only
  * cd ~/projects/
  * go work init ./core/devspotai/arcusdata ./serveyourstay/sys-backend-stay-experience
 * go work use ./core/devspotai/arcusdata ./serveyourstay/sys-backend-stay-experience
+
