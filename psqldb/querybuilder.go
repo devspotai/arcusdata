@@ -10,6 +10,7 @@ type QueryBuilder struct {
 	query        string
 	filters      []string
 	modifier     string
+	orderBy      string
 	args         []interface{}
 	modifierArgs []interface{}
 }
@@ -20,6 +21,7 @@ func NewQueryBuilder(baseQuery string) *QueryBuilder {
 		query:        baseQuery,
 		filters:      make([]string, 0),
 		modifier:     "",
+		orderBy:      "",
 		args:         make([]interface{}, 0),
 		modifierArgs: make([]interface{}, 0),
 	}
@@ -42,6 +44,11 @@ func (qb *QueryBuilder) AppendIf(condition bool, clause string, args ...interfac
 	return qb
 }
 
+func (qb *QueryBuilder) SetOrderBy(orderBy string) *QueryBuilder {
+	qb.orderBy = orderBy
+	return qb
+}
+
 func (qb *QueryBuilder) SetModifierAndModifierArgs(modifier string, args ...interface{}) *QueryBuilder {
 	qb.modifier = modifier
 	qb.modifierArgs = append(make([]interface{}, 0, len(args)), args...)
@@ -60,6 +67,9 @@ func (qb *QueryBuilder) Build() (string, []interface{}) {
 		}
 	}
 	qb.query = strings.TrimSpace(qb.query)
+	if qb.orderBy != "" {
+		qb.query += " " + qb.orderBy
+	}
 	if !strings.HasSuffix(qb.query, ";") {
 		qb.query += ";"
 	}
