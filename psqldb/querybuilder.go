@@ -141,16 +141,24 @@ func (qb *QueryBuilder) SetOffset(offset int) *QueryBuilder {
 	return qb
 }
 
+func (qb *QueryBuilder) GetWhereClause() string {
+	if len(qb.filters) == 0 {
+		return ""
+	}
+	return " WHERE " + strings.Join(qb.filters, " AND ")
+}
+
+func (qb *QueryBuilder) GetArgs() []interface{} {
+	return qb.args
+}
+
 // Build returns the final query and arguments (no trailing semicolon).
 func (qb *QueryBuilder) Build() (string, []interface{}) {
 	var sb strings.Builder
 	sb.Grow(len(qb.query) + 64)
 	sb.WriteString(qb.query)
 
-	if len(qb.filters) > 0 {
-		sb.WriteString(" WHERE ")
-		sb.WriteString(strings.Join(qb.filters, " AND "))
-	}
+	sb.WriteString(qb.GetWhereClause())
 
 	if qb.modifier != "" {
 		upper := strings.ToUpper(qb.modifier)
