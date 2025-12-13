@@ -17,6 +17,9 @@ build:
 test:
 	$(GO) test -race -cover -coverprofile=coverage.out ./...
 
+test-html:
+	$(GO) tool cover -html=coverage.out -o coverage.html
+
 ## Show coverage summary
 cover: test
 	$(GO) tool cover -func=coverage.out

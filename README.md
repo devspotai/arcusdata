@@ -54,7 +54,7 @@ This README would normally document whatever steps are necessary to get your app
  * git push origin v0.1.1
 
 ### Consumer needs to do:
- * go get github.com/yourorg/yourlib@v0.1.4
+ * go get github.com/yourorg/yourlib@v0.1.6
  * go mod tidy
  
 ### If we want to use this library and local changes only

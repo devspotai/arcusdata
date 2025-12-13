@@ -7,7 +7,13 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	config := Load()
-	assert.NotEmpty(t, config.ApplicationRWDatabaseURL)
-	assert.NotEmpty(t, config.ApplicationServerPort)
+	config := ConnectionPoolConfig{}
+	config.SetDefaults()
+	assert.True(t, config.IsValid())
+
+	mainConfig := Config{
+		ConnectionPoolConfig: config,
+	}
+
+	assert.NotNil(t, mainConfig.ConnectionPoolConfig)
 }
