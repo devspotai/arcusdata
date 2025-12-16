@@ -426,3 +426,21 @@ func convertQuestionMarksToDollarPlaceholders(query string) string {
 
 	return result.String()
 }
+
+func convertQuestionMarksToDollarPlaceholdersWithOffset(sql string, offset int) string {
+	// offset = 0  => first ? becomes $1
+	// offset = 3  => first ? becomes $4, etc.
+	var b strings.Builder
+	b.Grow(len(sql) + 10)
+
+	n := offset
+	for i := 0; i < len(sql); i++ {
+		if sql[i] == '?' {
+			n++
+			b.WriteString(fmt.Sprintf("$%d", n))
+		} else {
+			b.WriteByte(sql[i])
+		}
+	}
+	return b.String()
+}

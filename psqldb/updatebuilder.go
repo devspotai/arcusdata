@@ -5,121 +5,143 @@ import (
 	"strings"
 )
 
-// ===== Selective UPDATE builder =====
-
 type UpdateBuilder struct {
-	table        string
-	sets         []string
-	args         []interface{}
-	filters      []string
-	whereArgs    []interface{}
-	returning    string
-	requireWhere bool // safety guard to avoid accidental full-table updates
+	BuilderCore
+
+	table   string
+	sets    []string
+	wheres  []string
+	returns []string
+
+	requireWhere bool
 }
 
-// NewUpdateBuilder starts an UPDATE <table> ...
 func NewUpdateBuilder(table string) *UpdateBuilder {
-	return &UpdateBuilder{
-		table:        table,
+	u := &UpdateBuilder{
 		sets:         make([]string, 0, 8),
-		args:         make([]interface{}, 0, 8),
-		filters:      make([]string, 0, 4),
-		whereArgs:    make([]interface{}, 0, 4),
+		wheres:       make([]string, 0, 4),
+		returns:      make([]string, 0, 2),
 		requireWhere: true,
 	}
-}
-
-// Set adds "col = ?" with a value
-func (ub *UpdateBuilder) Set(column string, value interface{}) *UpdateBuilder {
-	ub.sets = append(ub.sets, column+" = ?")
-	ub.args = append(ub.args, value)
-	return ub
-}
-
-// SetIf adds "col = ?" only if condition is true
-func (ub *UpdateBuilder) SetIf(condition bool, column string, value interface{}) *UpdateBuilder {
-	if condition {
-		return ub.Set(column, value)
+	tq, err := u.QuoteDottedIdentifier(table)
+	if err != nil {
+		u.SetErr(err)
+	} else {
+		u.table = tq
 	}
-	return ub
+	return u
 }
 
-// SetExpr sets column to a raw SQL expression (e.g., now(), ST_GeomFromText(?))
-// You can pass args used by the expression in order.
-func (ub *UpdateBuilder) SetExpr(column string, expr string, args ...interface{}) *UpdateBuilder {
-	ub.sets = append(ub.sets, column+" = "+expr)
-	if len(args) > 0 {
-		ub.args = append(ub.args, args...)
+func (u *UpdateBuilder) RequireWhere(v bool) *UpdateBuilder { u.requireWhere = v; return u }
+
+func (u *UpdateBuilder) Set(col string, val any) *UpdateBuilder {
+	if u.err != nil {
+		return u
 	}
-	return ub
-}
-
-// Where appends a WHERE clause fragment joined with AND (use ? placeholders)
-func (ub *UpdateBuilder) Where(clause string, args ...interface{}) *UpdateBuilder {
-	ub.filters = append(ub.filters, clause)
-	if len(args) > 0 {
-		ub.whereArgs = append(ub.whereArgs, args...)
+	cq, err := u.QuoteDottedIdentifier(col)
+	if err != nil {
+		u.SetErr(err)
+		return u
 	}
-	return ub
+	u.sets = append(u.sets, fmt.Sprintf("%s = %s", cq, u.Param(val)))
+	return u
 }
 
-// WhereIf conditionally appends a WHERE clause
-func (ub *UpdateBuilder) WhereIf(condition bool, clause string, args ...interface{}) *UpdateBuilder {
-	if condition {
-		return ub.Where(clause, args...)
+func (u *UpdateBuilder) SetExpr(col string, expr Expr) *UpdateBuilder {
+	if u.err != nil {
+		return u
 	}
-	return ub
-}
-
-// Returning sets RETURNING <cols>
-func (ub *UpdateBuilder) Returning(cols string) *UpdateBuilder {
-	ub.returning = cols
-	return ub
-}
-
-// AllowFullTableUpdate disables the WHERE-required safety check (use sparingly)
-func (ub *UpdateBuilder) AllowFullTableUpdate() *UpdateBuilder {
-	ub.requireWhere = false
-	return ub
-}
-
-// Build produces the SQL with $-placeholders and the args slice.
-func (ub *UpdateBuilder) Build() (string, []interface{}, error) {
-	if len(ub.sets) == 0 {
-		return "", nil, fmt.Errorf("UpdateBuilder: no columns to update")
+	if err := safeExpr(expr); err != nil {
+		u.SetErr(err)
+		return u
 	}
-	if ub.requireWhere && len(ub.filters) == 0 {
-		return "", nil, fmt.Errorf("UpdateBuilder: missing WHERE (safety guard)")
+
+	cq, err := u.QuoteDottedIdentifier(col)
+	if err != nil {
+		u.SetErr(err)
+		return u
+	}
+	u.sets = append(u.sets, fmt.Sprintf("%s = %s", cq, expr.String()))
+	return u
+}
+
+func (u *UpdateBuilder) WhereEq(col string, val any) *UpdateBuilder {
+	if u.err != nil {
+		return u
+	}
+	cq, err := u.QuoteDottedIdentifier(col)
+	if err != nil {
+		u.SetErr(err)
+		return u
+	}
+	u.wheres = append(u.wheres, fmt.Sprintf("%s = %s", cq, u.Param(val)))
+	return u
+}
+
+func (u *UpdateBuilder) RequireAuthCTE(cteName string) *UpdateBuilder {
+	if u.err != nil {
+		return u
+	}
+	cteQ, err := u.QuoteIdentifier(cteName)
+	if err != nil {
+		u.SetErr(err)
+		return u
+	}
+	u.wheres = append(u.wheres, fmt.Sprintf("EXISTS (SELECT 1 FROM %s)", cteQ))
+	return u
+}
+
+func (u *UpdateBuilder) ReturningCols(cols ...string) *UpdateBuilder {
+	if u.err != nil {
+		return u
+	}
+	u.returns = u.returns[:0]
+	for _, c := range cols {
+		cq, err := u.QuoteDottedIdentifier(c)
+		if err != nil {
+			u.SetErr(err)
+			return u
+		}
+		u.returns = append(u.returns, cq)
+	}
+	return u
+}
+
+func (u *UpdateBuilder) Build() (string, []any, error) {
+	if u.err != nil {
+		return "", nil, u.err
+	}
+	if u.table == "" {
+		return "", nil, fmt.Errorf("no table")
+	}
+	if len(u.sets) == 0 {
+		return "", nil, fmt.Errorf("no SET clauses")
+	}
+	if u.requireWhere && len(u.wheres) == 0 {
+		return "", nil, fmt.Errorf("WHERE is required (safety guard)")
 	}
 
 	var sb strings.Builder
+	if len(u.ctes) > 0 {
+		sb.WriteString("WITH ")
+		sb.WriteString(strings.Join(u.ctes, ", "))
+		sb.WriteByte(' ')
+	}
+
 	sb.WriteString("UPDATE ")
-	sb.WriteString(ub.table)
+	sb.WriteString(u.table)
 	sb.WriteString(" SET ")
-	sb.WriteString(strings.Join(ub.sets, ", "))
+	sb.WriteString(strings.Join(u.sets, ", "))
 
-	if len(ub.filters) > 0 {
+	if len(u.wheres) > 0 {
 		sb.WriteString(" WHERE ")
-		sb.WriteString(strings.Join(ub.filters, " AND "))
+		sb.WriteString(strings.Join(u.wheres, " AND "))
 	}
 
-	if ub.returning != "" {
+	if len(u.returns) > 0 {
 		sb.WriteString(" RETURNING ")
-		sb.WriteString(ub.returning)
+		sb.WriteString(strings.Join(u.returns, ", "))
 	}
-	sb.WriteString(";")
 
-	// args = setArgs followed by whereArgs to match placeholder order
-	args := append(append([]interface{}{}, ub.args...), ub.whereArgs...)
-
-	sql := convertQuestionMarksToDollarPlaceholders(sb.String())
-	return sql, args, nil
-}
-
-// SetPtr adds "col = ?" only if ptr != nil (generic helper)
-func SetPtr[T any](ub *UpdateBuilder, column string, ptr *T) *UpdateBuilder {
-	if ptr != nil {
-		ub.Set(column, *ptr)
-	}
-	return ub
+	return sb.String(), u.args, nil
 }

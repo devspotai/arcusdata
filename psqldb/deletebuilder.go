@@ -5,74 +5,105 @@ import (
 	"strings"
 )
 
-// ===== Selective UPDATE builder =====
-
 type DeleteBuilder struct {
-	query        string
-	filters      []string
-	whereArgs    []interface{}
-	requireWhere bool // safety guard to avoid accidental full-table updates
+	BuilderCore
+
+	table   string
+	wheres  []string
+	returns []string
+
+	requireWhere bool
 }
 
-// NewDeleteBuilder starts a DELETE FROM <table> ...
-func NewDeleteBuilder(baseQuery string) *DeleteBuilder {
-	return &DeleteBuilder{
-		query:        baseQuery,
-		filters:      make([]string, 0, 4),
-		whereArgs:    make([]interface{}, 0, 4),
+func NewDeleteBuilder(table string) *DeleteBuilder {
+	d := &DeleteBuilder{
+		wheres:       make([]string, 0, 4),
+		returns:      make([]string, 0, 2),
 		requireWhere: true,
 	}
-}
-
-func (db *DeleteBuilder) Append(additionalQuery string) *DeleteBuilder {
-	db.query += " " + additionalQuery
-	return db
-}
-
-// Where appends a WHERE clause fragment joined with AND (use ? placeholders)
-func (db *DeleteBuilder) Where(clause string, args ...interface{}) *DeleteBuilder {
-	db.filters = append(db.filters, clause)
-	if len(args) > 0 {
-		db.whereArgs = append(db.whereArgs, args...)
+	tq, err := d.QuoteDottedIdentifier(table)
+	if err != nil {
+		d.SetErr(err)
+	} else {
+		d.table = tq
 	}
-	return db
+	return d
 }
 
-// WhereIf conditionally appends a WHERE clause
-func (db *DeleteBuilder) WhereIf(condition bool, clause string, args ...interface{}) *DeleteBuilder {
-	if condition {
-		return db.Where(clause, args...)
+func (d *DeleteBuilder) RequireWhere(v bool) *DeleteBuilder { d.requireWhere = v; return d }
+
+func (d *DeleteBuilder) WhereEq(col string, val any) *DeleteBuilder {
+	if d.err != nil {
+		return d
 	}
-	return db
+	cq, err := d.QuoteDottedIdentifier(col)
+	if err != nil {
+		d.SetErr(err)
+		return d
+	}
+	d.wheres = append(d.wheres, fmt.Sprintf("%s = %s", cq, d.Param(val)))
+	return d
 }
 
-// AllowFullTableUpdate disables the WHERE-required safety check (use sparingly)
-func (db *DeleteBuilder) AllowFullTableUpdate() *DeleteBuilder {
-	db.requireWhere = false
-	return db
+func (d *DeleteBuilder) RequireAuthCTE(cteName string) *DeleteBuilder {
+	if d.err != nil {
+		return d
+	}
+	cteQ, err := d.QuoteIdentifier(cteName)
+	if err != nil {
+		d.SetErr(err)
+		return d
+	}
+	d.wheres = append(d.wheres, fmt.Sprintf("EXISTS (SELECT 1 FROM %s)", cteQ))
+	return d
 }
 
-// Build produces the SQL with $-placeholders and the args slice.
-func (db *DeleteBuilder) Build() (string, []interface{}, error) {
-	if len(db.filters) == 0 && db.requireWhere {
-		return "", nil, fmt.Errorf("DeleteBuilder: missing WHERE (safety guard)")
+func (d *DeleteBuilder) ReturningCols(cols ...string) *DeleteBuilder {
+	if d.err != nil {
+		return d
+	}
+	d.returns = d.returns[:0]
+	for _, c := range cols {
+		cq, err := d.QuoteDottedIdentifier(c)
+		if err != nil {
+			d.SetErr(err)
+			return d
+		}
+		d.returns = append(d.returns, cq)
+	}
+	return d
+}
+
+func (d *DeleteBuilder) Build() (string, []any, error) {
+	if d.err != nil {
+		return "", nil, d.err
+	}
+	if d.table == "" {
+		return "", nil, fmt.Errorf("no table")
+	}
+	if d.requireWhere && len(d.wheres) == 0 {
+		return "", nil, fmt.Errorf("WHERE is required (safety guard)")
 	}
 
 	var sb strings.Builder
-	if len(db.filters) > 0 {
-		if strings.Contains(strings.ToUpper(db.query), "WHERE") {
-			sb.WriteString(" AND ")
-		} else {
-			sb.WriteString(" WHERE ")
-		}
-		sb.WriteString(strings.Join(db.filters, " AND "))
+	if len(d.ctes) > 0 {
+		sb.WriteString("WITH ")
+		sb.WriteString(strings.Join(d.ctes, ", "))
+		sb.WriteByte(' ')
 	}
 
-	sb.WriteString(";")
+	sb.WriteString("DELETE FROM ")
+	sb.WriteString(d.table)
 
-	// args = setArgs followed by whereArgs to match placeholder order
-	args := append([]interface{}{}, db.whereArgs...)
+	if len(d.wheres) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(d.wheres, " AND "))
+	}
 
-	sql := convertQuestionMarksToDollarPlaceholders(sb.String())
-	return sql, args, nil
+	if len(d.returns) > 0 {
+		sb.WriteString(" RETURNING ")
+		sb.WriteString(strings.Join(d.returns, ", "))
+	}
+
+	return sb.String(), d.args, nil
 }

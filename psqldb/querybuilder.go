@@ -1,216 +1,195 @@
 package psqldb
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 )
 
 // QueryBuilder helps build dynamic queries safely
 type QueryBuilder struct {
-	query      string
-	filters    []string
-	args       []interface{}
-	paramCount int
+	BuilderCore
 
-	modifier             string
-	hasOrderByInModifier bool // detect accidental ORDER BY leakage in modifier
-	orderBy              string
-
-	limitSet, offsetSet bool
-	limit, offset       int
+	selects []string
+	from    string
+	wheres  []string
+	limit   *int
+	offset  *int
+	orderBy string
 }
 
 // NewQueryBuilder creates a new query builder
-func NewQueryBuilder(baseQuery string) *QueryBuilder {
+func NewQueryBuilder() *QueryBuilder {
 	return &QueryBuilder{
-		query:   strings.TrimSpace(baseQuery),
-		filters: make([]string, 0),
-		args:    make([]interface{}, 0),
+		selects: make([]string, 0, 4),
+		wheres:  make([]string, 0, 4),
+		limit:   nil,
+		offset:  nil,
 	}
 }
 
-func (qb *QueryBuilder) nextParam() string {
-	qb.paramCount++
-	return fmt.Sprintf("$%d", qb.paramCount)
-}
-
-// replaceQMarksInFragment replaces each "?" in this fragment with the next $n,
-// affecting ONLY this fragment (so JSON operators in other fragments are safe).
-func (qb *QueryBuilder) replaceQMarksInFragment(fragment string) string {
-	var builder strings.Builder
-	builder.Grow(len(fragment) + 8)
-	for i := 0; i < len(fragment); i++ {
-		if fragment[i] == '?' {
-			builder.WriteString(qb.nextParam())
-		} else {
-			builder.WriteByte(fragment[i])
+func (q *QueryBuilder) SelectCols(cols ...string) *QueryBuilder {
+	if q.err != nil {
+		return q
+	}
+	for _, c := range cols {
+		cq, err := q.QuoteDottedIdentifier(c)
+		if err != nil {
+			q.SetErr(err)
+			return q
 		}
+		q.selects = append(q.selects, cq)
 	}
-	return builder.String()
+	return q
 }
 
-// Append adds a WHERE fragment that contains '?' placeholders and its args.
-// Example: qb.Append("host_company_id = ?", hostCompanyID)
-func (qb *QueryBuilder) Append(fragment string, args ...interface{}) *QueryBuilder {
-	qb.filters = append(qb.filters, qb.replaceQMarksInFragment(fragment))
-	qb.args = append(qb.args, args...)
-	return qb
+func (q *QueryBuilder) FromTable(table string) *QueryBuilder {
+	if q.err != nil {
+		return q
+	}
+	tq, err := q.QuoteDottedIdentifier(table)
+	if err != nil {
+		q.SetErr(err)
+		return q
+	}
+	q.from = tq
+	return q
 }
 
-// AppendRaw adds a WHERE fragment *without* placeholder substitution.
-// Use when the fragment legitimately contains '?' operators (JSON ?/ ?|/ ?&)
-// or has no parameters at all.
-func (qb *QueryBuilder) AppendRaw(fragment string) *QueryBuilder {
-	qb.filters = append(qb.filters, fragment)
-	return qb
+func (q *QueryBuilder) WhereEq(col string, val any) *QueryBuilder {
+	if q.err != nil {
+		return q
+	}
+	cq, err := q.QuoteDottedIdentifier(col)
+	if err != nil {
+		q.SetErr(err)
+		return q
+	}
+	q.wheres = append(q.wheres, fmt.Sprintf("%s = %s", cq, q.Param(val)))
+	return q
 }
 
-// AppendIf conditionally adds a clause to the query
-func (qb *QueryBuilder) AppendIf(condition bool, clause string, args ...interface{}) *QueryBuilder {
-	if condition {
-		return qb.Append(clause, args...)
+// RequireAuthCTE adds EXISTS(SELECT 1 FROM "auth") to WHERE.
+func (q *QueryBuilder) RequireAuthCTE(cteName string) *QueryBuilder {
+	if q.err != nil {
+		return q
 	}
-	return qb
+	cteQ, err := q.QuoteIdentifier(cteName)
+	if err != nil {
+		q.SetErr(err)
+		return q
+	}
+	q.wheres = append(q.wheres, fmt.Sprintf("EXISTS (SELECT 1 FROM %s)", cteQ))
+	return q
 }
 
-// AppendRawIf conditionally adds a raw clause (no placeholder substitution)
-func (qb *QueryBuilder) AppendRawIf(condition bool, clause string) *QueryBuilder {
-	if condition {
-		return qb.AppendRaw(clause)
-	}
-	return qb
-}
-
-// SetModifierAndArgs sets a trailing fragment (no ORDER BY/LIMIT/OFFSET here).
-// It can include '?' placeholders which will be $n-ized.
-func (qb *QueryBuilder) SetModifierAndArgs(mod string, args ...interface{}) *QueryBuilder {
-	upper := strings.ToUpper(mod)
-	if strings.Contains(upper, "ORDER BY") {
-		qb.hasOrderByInModifier = true
-	}
-	if strings.Contains(upper, " LIMIT ") || strings.HasSuffix(upper, " LIMIT") ||
-		strings.Contains(upper, " OFFSET ") || strings.HasSuffix(upper, " OFFSET") {
-		// You may choose to error here; we just note it and rely on Build to guard.
-	}
-	var builder strings.Builder
-	for i := 0; i < len(mod); i++ {
-		if mod[i] == '?' {
-			builder.WriteString(qb.nextParam())
-		} else {
-			builder.WriteByte(mod[i])
-		}
-	}
-	qb.modifier = strings.TrimSpace(builder.String())
-	qb.args = append(qb.args, args...)
-	return qb
+func (q *QueryBuilder) Limit(n int) *QueryBuilder {
+	q.limit = &n
+	return q
 }
 
 // SafeOrderBy whitelists column + direction and prevents double ORDER BY.
-func (qb *QueryBuilder) SafeOrderBy(col string, dir string, allowedCols map[string]struct{}) error {
-	if qb.hasOrderByInModifier {
-		return errors.New("ORDER BY already present in modifier; remove duplicate")
+func (q *QueryBuilder) SafeOrderBy(col string, dir string, allowedCols map[string]struct{}) *QueryBuilder {
+	if q.err != nil {
+		return q
 	}
-	if _, ok := allowedCols[col]; !ok {
-		return fmt.Errorf("unsafe ORDER BY column: %q", col)
+	verifiedCol, err := q.QuoteIdentifier(col)
+	if err != nil {
+		q.SetErr(err)
+		return q
 	}
 	ud := strings.ToUpper(strings.TrimSpace(dir))
 	if ud == "" {
 		ud = "ASC"
 	}
 	if ud != "ASC" && ud != "DESC" {
-		return fmt.Errorf("unsafe ORDER BY direction: %q", dir)
+		err := fmt.Errorf("unsafe ORDER BY direction: %q", dir)
+		q.SetErr(err)
+		return q
 	}
-	qb.orderBy = fmt.Sprintf("ORDER BY %s %s", col, ud)
-	return nil
+	q.orderBy = fmt.Sprintf("ORDER BY %s %s", verifiedCol, ud)
+	return q
 }
 
-// Limit/Offset (parameterized)
-func (qb *QueryBuilder) SetLimit(limit int) *QueryBuilder {
-	if limit > 0 {
-		qb.limitSet = true
-		qb.limit = limit
-	}
-	return qb
-}
 func (qb *QueryBuilder) SetOffset(offset int) *QueryBuilder {
 	if offset > 0 {
-		qb.offsetSet = true
-		qb.offset = offset
+		qb.offset = &offset
+	}
+	if offset < 0 {
+		qb.offset = nil
 	}
 	return qb
 }
 
-func (qb *QueryBuilder) GetWhereClause() string {
-	if len(qb.filters) == 0 {
-		return ""
+func (q *QueryBuilder) Build() (string, []any, error) {
+	if q.err != nil {
+		return "", nil, q.err
 	}
-	return " WHERE " + strings.Join(qb.filters, " AND ")
-}
+	if len(q.selects) == 0 {
+		return "", nil, fmt.Errorf("no SELECT columns")
+	}
+	if q.from == "" {
+		return "", nil, fmt.Errorf("no FROM table")
+	}
 
-func (qb *QueryBuilder) GetArgs() []interface{} {
-	return qb.args
-}
-
-// Build returns the final query and arguments (no trailing semicolon).
-func (qb *QueryBuilder) Build() (string, []interface{}) {
 	var sb strings.Builder
-	sb.Grow(len(qb.query) + 64)
-	sb.WriteString(qb.query)
-
-	sb.WriteString(qb.GetWhereClause())
-
-	if qb.modifier != "" {
-		upper := strings.ToUpper(qb.modifier)
-		// Optional strict guard: forbid LIMIT/OFFSET inside modifier
-		if strings.Contains(upper, " LIMIT ") || strings.HasSuffix(upper, " LIMIT") ||
-			strings.Contains(upper, " OFFSET ") || strings.HasSuffix(upper, " OFFSET") {
-			// Prefer to fail fast instead of silently producing invalid SQL:
-			// return "", nil
-		}
+	if len(q.ctes) > 0 {
+		sb.WriteString("WITH ")
+		sb.WriteString(strings.Join(q.ctes, ", "))
 		sb.WriteByte(' ')
-		sb.WriteString(qb.modifier)
 	}
 
-	if qb.orderBy != "" {
-		sb.WriteByte(' ')
-		sb.WriteString(qb.orderBy)
+	sb.WriteString("SELECT ")
+	sb.WriteString(strings.Join(q.selects, ", "))
+	sb.WriteString(" FROM ")
+	sb.WriteString(q.from)
+
+	if len(q.wheres) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(q.wheres, " AND "))
 	}
 
-	// Parameterize LIMIT/OFFSET for better plan reuse
-	if qb.limitSet {
-		sb.WriteString(" LIMIT ")
-		sb.WriteString(qb.nextParam())
-		qb.args = append(qb.args, qb.limit)
-	}
-	if qb.offsetSet {
-		sb.WriteString(" OFFSET ")
-		sb.WriteString(qb.nextParam())
-		qb.args = append(qb.args, qb.offset)
+	if q.limit != nil {
+		sb.WriteString(fmt.Sprintf(" LIMIT %d", *q.limit))
 	}
 
-	return sb.String(), qb.args
+	return sb.String(), q.args, nil
 }
 
-func (qb *QueryBuilder) AppendArrayOverlapAtLeast(col, elemType string, values any, n int) *QueryBuilder {
-	qb.Append(fmt.Sprintf("%s && ?::%s[]", col, elemType), values)
-	qb.Append(fmt.Sprintf(`
+func (q *QueryBuilder) AppendArrayOverlapAtLeast(col, elemType string, values any, n int) *QueryBuilder {
+	if q.err != nil {
+		return q
+	}
+	quotedColumn, err := q.QuoteDottedIdentifier(col)
+	if err != nil {
+		q.SetErr(err)
+		return q
+	}
+	q.wheres = append(q.wheres, fmt.Sprintf("%s && %s::%s[]", quotedColumn, q.Param(values), elemType))
+	q.wheres = append(q.wheres, fmt.Sprintf(`
 		cardinality(ARRAY(
 				SELECT UNNEST(%s)
 				INTERSECT
-				SELECT UNNEST(?::%s[])
-		)) >= ?`, col, elemType), values, n)
-	return qb
+				SELECT UNNEST(%s::%s[])
+		)) >= %s`, quotedColumn, q.Param(values), elemType), fmt.Sprintf("%d", n))
+	return q
 }
 
-func (qb *QueryBuilder) AppendProximitySearch(col string, latitude float64, longitude float64, distance float64) *QueryBuilder {
-	qb.Append(`
+func (q *QueryBuilder) AppendProximitySearch(col string, latitude float64, longitude float64, distance float64) *QueryBuilder {
+	if q.err != nil {
+		return q
+	}
+	quotedColumn, err := q.QuoteDottedIdentifier(col)
+	if err != nil {
+		q.SetErr(err)
+		return q
+	}
+	q.wheres = append(q.wheres, fmt.Sprintf(`
 			ST_DWithin(
-				location_geography,
-				ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography,
-				? * 1000
+				%s,
+				ST_SetSRID(ST_MakePoint(%f, %f), 4326)::geography,
+				%f * 1000
 			)`,
-		latitude, longitude, distance,
-	)
-	return qb
+		quotedColumn, latitude, longitude, distance,
+	))
+	return q
 }
