@@ -78,6 +78,32 @@ func (u *UpdateBuilder) WhereEq(col string, val any) *UpdateBuilder {
 	return u
 }
 
+func (u *UpdateBuilder) WhereIsNull(col string) *UpdateBuilder {
+	if u.err != nil {
+		return u
+	}
+	cq, err := u.QuoteDottedIdentifier(col)
+	if err != nil {
+		u.SetErr(err)
+		return u
+	}
+	u.wheres = append(u.wheres, fmt.Sprintf("%s IS NULL", cq))
+	return u
+}
+
+func (u *UpdateBuilder) WhereIsNotNull(col string) *UpdateBuilder {
+	if u.err != nil {
+		return u
+	}
+	cq, err := u.QuoteDottedIdentifier(col)
+	if err != nil {
+		u.SetErr(err)
+		return u
+	}
+	u.wheres = append(u.wheres, fmt.Sprintf("%s IS NOT NULL", cq))
+	return u
+}
+
 func (u *UpdateBuilder) RequireAuthCTE(cteName string) *UpdateBuilder {
 	if u.err != nil {
 		return u

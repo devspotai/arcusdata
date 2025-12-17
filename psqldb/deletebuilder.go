@@ -45,6 +45,32 @@ func (d *DeleteBuilder) WhereEq(col string, val any) *DeleteBuilder {
 	return d
 }
 
+func (u *DeleteBuilder) WhereIsNull(col string) *DeleteBuilder {
+	if u.err != nil {
+		return u
+	}
+	cq, err := u.QuoteDottedIdentifier(col)
+	if err != nil {
+		u.SetErr(err)
+		return u
+	}
+	u.wheres = append(u.wheres, fmt.Sprintf("%s IS NULL", cq))
+	return u
+}
+
+func (u *DeleteBuilder) WhereIsNotNull(col string) *DeleteBuilder {
+	if u.err != nil {
+		return u
+	}
+	cq, err := u.QuoteDottedIdentifier(col)
+	if err != nil {
+		u.SetErr(err)
+		return u
+	}
+	u.wheres = append(u.wheres, fmt.Sprintf("%s IS NOT NULL", cq))
+	return u
+}
+
 func (d *DeleteBuilder) RequireAuthCTE(cteName string) *DeleteBuilder {
 	if d.err != nil {
 		return d

@@ -68,6 +68,32 @@ func (q *QueryBuilder) WhereEq(col string, val any) *QueryBuilder {
 	return q
 }
 
+func (u *QueryBuilder) WhereIsNull(col string) *QueryBuilder {
+	if u.err != nil {
+		return u
+	}
+	cq, err := u.QuoteDottedIdentifier(col)
+	if err != nil {
+		u.SetErr(err)
+		return u
+	}
+	u.wheres = append(u.wheres, fmt.Sprintf("%s IS NULL", cq))
+	return u
+}
+
+func (u *QueryBuilder) WhereIsNotNull(col string) *QueryBuilder {
+	if u.err != nil {
+		return u
+	}
+	cq, err := u.QuoteDottedIdentifier(col)
+	if err != nil {
+		u.SetErr(err)
+		return u
+	}
+	u.wheres = append(u.wheres, fmt.Sprintf("%s IS NOT NULL", cq))
+	return u
+}
+
 // RequireAuthCTE adds EXISTS(SELECT 1 FROM "auth") to WHERE.
 func (q *QueryBuilder) RequireAuthCTE(cteName string) *QueryBuilder {
 	if q.err != nil {
