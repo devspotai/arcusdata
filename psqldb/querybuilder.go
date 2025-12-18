@@ -196,7 +196,7 @@ func (q *QueryBuilder) AppendArrayOverlapAtLeast(col, elemType string, values an
 				SELECT UNNEST(%s)
 				INTERSECT
 				SELECT UNNEST(%s::%s[])
-		)) >= %s`, quotedColumn, q.Param(values), elemType), fmt.Sprintf("%d", n))
+		)) >= %s`, quotedColumn, q.Param(values), elemType, fmt.Sprintf("%d", n)))
 	return q
 }
 

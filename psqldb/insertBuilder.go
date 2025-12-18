@@ -38,9 +38,13 @@ func (i *InsertBuilder) Columns(cols ...string) *InsertBuilder {
 	if i.err != nil {
 		return i
 	}
+	if len(cols) == 0 {
+		i.SetErr(fmt.Errorf("no columns specified"))
+		return i
+	}
 	i.cols = i.cols[:0]
 	for _, c := range cols {
-		cq, err := i.QuoteDottedIdentifier(c)
+		cq, err := i.QuoteIdentifier(c)
 		if err != nil {
 			i.SetErr(err)
 			return i
@@ -85,7 +89,7 @@ func (i *InsertBuilder) ReturningCols(cols ...string) *InsertBuilder {
 	}
 	i.returns = i.returns[:0]
 	for _, c := range cols {
-		cq, err := i.QuoteDottedIdentifier(c)
+		cq, err := i.QuoteIdentifier(c)
 		if err != nil {
 			i.SetErr(err)
 			return i

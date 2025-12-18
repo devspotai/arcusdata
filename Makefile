@@ -11,7 +11,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 ## Compile all packages (no binary). Good sanity check for a library.
 build:
 	@echo "📦 Building (compile only) $(MODULE)"
-	$(GO) build -v $(PKGS)
+	$(GO) build -v ./...
 
 ## Run with coverage + race detector
 test:
