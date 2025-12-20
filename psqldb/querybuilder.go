@@ -174,14 +174,22 @@ func (q *QueryBuilder) Build() (string, []any, error) {
 		sb.WriteString(strings.Join(q.wheres, " AND "))
 	}
 
+	if q.orderBy != "" {
+		sb.WriteByte(' ')
+		sb.WriteString(q.orderBy)
+	}
+
 	if q.limit != nil {
 		sb.WriteString(fmt.Sprintf(" LIMIT %d", *q.limit))
 	}
 
+	if q.offset != nil {
+		sb.WriteString(fmt.Sprintf(" OFFSET %d", *q.offset))
+	}
 	return sb.String(), q.args, nil
 }
 
-func (q *QueryBuilder) AppendArrayOverlapAtLeast(col, elemType string, values any, n int) *QueryBuilder {
+func (q *QueryBuilder) AppendArrayOverlapAtLeast(col string, values []string, n int) *QueryBuilder {
 	if q.err != nil {
 		return q
 	}
@@ -190,13 +198,16 @@ func (q *QueryBuilder) AppendArrayOverlapAtLeast(col, elemType string, values an
 		q.SetErr(err)
 		return q
 	}
-	q.wheres = append(q.wheres, fmt.Sprintf("%s && %s::%s[]", quotedColumn, q.Param(values), elemType))
-	q.wheres = append(q.wheres, fmt.Sprintf(`
-		cardinality(ARRAY(
-				SELECT UNNEST(%s)
+	pVals := q.Param(values)
+	pN := q.Param(n)
+
+	q.wheres = append(q.wheres, fmt.Sprintf(`(
+		SELECT COUNT(*) FROM (
+				SELECT UNNEST(COALESCE(%s, '{}'::text[]))
 				INTERSECT
-				SELECT UNNEST(%s::%s[])
-		)) >= %s`, quotedColumn, q.Param(values), elemType, fmt.Sprintf("%d", n)))
+				SELECT UNNEST(%s::text[])
+			) AS inter
+		) >= %s`, quotedColumn, pVals, pN))
 	return q
 }
 
