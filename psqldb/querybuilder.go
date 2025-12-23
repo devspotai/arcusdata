@@ -243,3 +243,18 @@ func (q *QueryBuilder) AppendProximitySearch(col string, latitude float64, longi
 	))
 	return q
 }
+
+func (q *QueryBuilder) GenerateCountSql() (string, []any, error) {
+	if q.err != nil {
+		return "", nil, q.err
+	}
+	var sb strings.Builder
+	sb.WriteString("SELECT COUNT(*) FROM ")
+	sb.WriteString(q.from)
+	if len(q.wheres) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(q.wheres, " AND "))
+	}
+
+	return sb.String(), q.args, nil
+}
