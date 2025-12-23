@@ -133,7 +133,34 @@ func TestSafeOrderByValidAndInvalid(t *testing.T) {
 	if q2.orderBy != "" {
 		t.Fatalf("expected empty orderBy on error, got: %q", q2.orderBy)
 	}
+}
 
+func TestRequireAuthCTEAddsExistsClauseInQueryBuilder(t *testing.T) {
+	qb := NewQueryBuilder()
+	AuthPermissionsCTE{
+		CTEName:         "auth_cte",
+		PermTable:       "host_company_user_permissions",
+		PermAlias:       "p",
+		UserIDCol:       "user_id",
+		CompanyIDCol:    "host_company_id",
+		StatusCol:       "permission_status",
+		RoleCol:         "host_role",
+		UserID:          "user-123",
+		CompanyID:       "host-company-456",
+		AllowedRoles:    []string{"OWNER"},
+		RequireVerified: true,
+	}.Apply(qb)
+	qb.SelectCols("id")
+	qb.FromTable("sessions")
+	qb.RequireAuthCTE("auth_cte")
+	sql, _, err := qb.Build()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(sql, "EXISTS") || !strings.Contains(sql, "SELECT 1 FROM") {
+		t.Fatalf("expected EXISTS(SELECT 1 FROM ...) in sql: %q", sql)
+	}
+	assert.Equal(t, "WITH \"auth_cte\" AS (SELECT 1 FROM \"host_company_user_permissions\" \"p\" WHERE \"p\".\"user_id\" = $1 AND \"p\".\"host_company_id\" = $2 AND \"p\".\"permission_status\" = 'VERIFIED' AND \"p\".\"host_role\" = ANY($3)) SELECT \"id\" FROM \"sessions\" WHERE EXISTS (SELECT 1 FROM \"auth_cte\")", sql)
 }
 
 func TestAppendArrayOverlapAtLeastAddsWhereAndArgs(t *testing.T) {
