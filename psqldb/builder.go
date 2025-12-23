@@ -6,6 +6,20 @@ import (
 	"strings"
 )
 
+type Op string
+
+const (
+	OpEqual              Op = "="
+	OpNotEqual           Op = "!="
+	OpGreaterThan        Op = ">"
+	OpLessThan           Op = "<"
+	OpIn                 Op = "IN"
+	OpLike               Op = "LIKE"
+	OpILike              Op = "ILIKE"
+	OpGreaterThanOrEqual Op = ">="
+	OpLessThanOrEqual    Op = "<="
+)
+
 var identifierRegex = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func ValidateIdentifier(name string) (string, error) {

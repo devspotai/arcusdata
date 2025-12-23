@@ -55,6 +55,19 @@ func (q *QueryBuilder) FromTable(table string) *QueryBuilder {
 	return q
 }
 
+func (q *QueryBuilder) WhereWithCondition(col string, val any, op Op) *QueryBuilder {
+	if q.err != nil {
+		return q
+	}
+	cq, err := q.QuoteDottedIdentifier(col)
+	if err != nil {
+		q.SetErr(err)
+		return q
+	}
+	q.wheres = append(q.wheres, fmt.Sprintf("%s %s %s", cq, op, q.Param(val)))
+	return q
+}
+
 func (q *QueryBuilder) WhereEq(col string, val any) *QueryBuilder {
 	if q.err != nil {
 		return q
