@@ -45,6 +45,53 @@ func (d *DeleteBuilder) WhereEq(col string, val any) *DeleteBuilder {
 	return d
 }
 
+func (d *DeleteBuilder) WhereIn(col string, vals ...any) *DeleteBuilder {
+	if d.err != nil {
+		return d
+	}
+	cq, err := d.QuoteDottedIdentifier(col)
+	if err != nil {
+		d.SetErr(err)
+		return d
+	}
+	var placeholders []string
+	for i := range vals {
+		placeholders = append(placeholders, d.Param(vals[i]))
+	}
+	d.wheres = append(d.wheres, fmt.Sprintf("%s IN (%s)", cq, strings.Join(placeholders, ", ")))
+	return d
+}
+
+func (d *DeleteBuilder) WhereNotIn(col string, vals ...any) *DeleteBuilder {
+	if d.err != nil {
+		return d
+	}
+	cq, err := d.QuoteDottedIdentifier(col)
+	if err != nil {
+		d.SetErr(err)
+		return d
+	}
+	var placeholders []string
+	for i := range vals {
+		placeholders = append(placeholders, d.Param(vals[i]))
+	}
+	d.wheres = append(d.wheres, fmt.Sprintf("%s NOT IN (%s)", cq, strings.Join(placeholders, ", ")))
+	return d
+}
+
+func (d *DeleteBuilder) WhereNotEq(col string, val any) *DeleteBuilder {
+	if d.err != nil {
+		return d
+	}
+	cq, err := d.QuoteDottedIdentifier(col)
+	if err != nil {
+		d.SetErr(err)
+		return d
+	}
+	d.wheres = append(d.wheres, fmt.Sprintf("%s != %s", cq, d.Param(val)))
+	return d
+}
+
 func (u *DeleteBuilder) WhereIsNull(col string) *DeleteBuilder {
 	if u.err != nil {
 		return u
