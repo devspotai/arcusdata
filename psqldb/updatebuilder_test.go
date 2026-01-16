@@ -134,3 +134,68 @@ func TestUpdateBuilder_RequireAuthCTEAndMultipleClauses(t *testing.T) {
 		t.Fatalf("unexpected args for multiple clauses: %#v", args2)
 	}
 }
+func TestUpdateBuilder_WhereIn(t *testing.T) {
+	b := NewUpdateBuilder("users")
+	b.Set("status", "active")
+	b.WhereIn("id", 1, 2, 3)
+
+	sql, args, err := b.Build()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(sql, " IN (") {
+		t.Fatalf("expected IN clause in sql, got: %s", sql)
+	}
+	// args should be ["active", 1, 2, 3]
+	if len(args) != 4 {
+		t.Fatalf("expected 4 args, got %d: %#v", len(args), args)
+	}
+	if !reflect.DeepEqual(args, []any{"active", 1, 2, 3}) {
+		t.Fatalf("unexpected args order or values: %#v", args)
+	}
+	assert.Equal(t, "UPDATE \"users\" SET \"status\" = $1 WHERE \"id\" IN ($2, $3, $4)", sql)
+}
+
+func TestUpdateBuilder_WhereNotIn(t *testing.T) {
+	b := NewUpdateBuilder("products")
+	b.Set("available", true)
+	b.WhereNotIn("sku", "a", "b")
+
+	sql, args, err := b.Build()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(sql, " NOT IN (") {
+		t.Fatalf("expected NOT IN clause in sql, got: %s", sql)
+	}
+	// args should be [true, "a", "b"]
+	if len(args) != 3 {
+		t.Fatalf("expected 3 args, got %d: %#v", len(args), args)
+	}
+	if !reflect.DeepEqual(args, []any{true, "a", "b"}) {
+		t.Fatalf("unexpected args for NOT IN test: %#v", args)
+	}
+	assert.Equal(t, "UPDATE \"products\" SET \"available\" = $1 WHERE \"sku\" NOT IN ($2, $3)", sql)
+}
+
+func TestUpdateBuilder_WhereNotEq(t *testing.T) {
+	b := NewUpdateBuilder("sessions")
+	b.Set("active", false)
+	b.WhereNotEq("user_id", 42)
+
+	sql, args, err := b.Build()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(sql, "!=") {
+		t.Fatalf("expected != in sql, got: %s", sql)
+	}
+	// args should be [false, 42]
+	if len(args) != 2 {
+		t.Fatalf("expected 2 args, got %d: %#v", len(args), args)
+	}
+	if args[0] != false || args[1] != 42 {
+		t.Fatalf("unexpected args for NOT EQ test: %#v", args)
+	}
+	assert.Equal(t, "UPDATE \"sessions\" SET \"active\" = $1 WHERE \"user_id\" != $2", sql)
+}

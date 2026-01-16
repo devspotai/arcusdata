@@ -104,6 +104,53 @@ func (u *UpdateBuilder) WhereIsNotNull(col string) *UpdateBuilder {
 	return u
 }
 
+func (u *UpdateBuilder) WhereIn(col string, vals ...any) *UpdateBuilder {
+	if u.err != nil {
+		return u
+	}
+	cq, err := u.QuoteDottedIdentifier(col)
+	if err != nil {
+		u.SetErr(err)
+		return u
+	}
+	var placeholders []string
+	for i := range vals {
+		placeholders = append(placeholders, u.Param(vals[i]))
+	}
+	u.wheres = append(u.wheres, fmt.Sprintf("%s IN (%s)", cq, strings.Join(placeholders, ", ")))
+	return u
+}
+
+func (u *UpdateBuilder) WhereNotIn(col string, vals ...any) *UpdateBuilder {
+	if u.err != nil {
+		return u
+	}
+	cq, err := u.QuoteDottedIdentifier(col)
+	if err != nil {
+		u.SetErr(err)
+		return u
+	}
+	var placeholders []string
+	for i := range vals {
+		placeholders = append(placeholders, u.Param(vals[i]))
+	}
+	u.wheres = append(u.wheres, fmt.Sprintf("%s NOT IN (%s)", cq, strings.Join(placeholders, ", ")))
+	return u
+}
+
+func (u *UpdateBuilder) WhereNotEq(col string, val any) *UpdateBuilder {
+	if u.err != nil {
+		return u
+	}
+	cq, err := u.QuoteDottedIdentifier(col)
+	if err != nil {
+		u.SetErr(err)
+		return u
+	}
+	u.wheres = append(u.wheres, fmt.Sprintf("%s != %s", cq, u.Param(val)))
+	return u
+}
+
 func (u *UpdateBuilder) RequireAuthCTE(cteName string) *UpdateBuilder {
 	if u.err != nil {
 		return u
