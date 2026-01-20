@@ -131,20 +131,35 @@ func (q *QueryBuilder) SafeOrderBy(col string, dir string, allowedCols map[strin
 	if q.err != nil {
 		return q
 	}
+
+	col = strings.TrimSpace(col)
+	if col == "" {
+		// Treat empty sort as "no order by" (or set a default)
+		return q
+	}
+
+	if allowedCols != nil {
+		if _, ok := allowedCols[col]; !ok {
+			q.SetErr(fmt.Errorf("unsafe ORDER BY column: %q", col))
+			return q
+		}
+	}
+
 	verifiedCol, err := q.QuoteIdentifier(col)
 	if err != nil {
 		q.SetErr(err)
 		return q
 	}
+
 	ud := strings.ToUpper(strings.TrimSpace(dir))
 	if ud == "" {
 		ud = "ASC"
 	}
 	if ud != "ASC" && ud != "DESC" {
-		err := fmt.Errorf("unsafe ORDER BY direction: %q", dir)
-		q.SetErr(err)
+		q.SetErr(fmt.Errorf("unsafe ORDER BY direction: %q", dir))
 		return q
 	}
+
 	q.orderBy = fmt.Sprintf("ORDER BY %s %s", verifiedCol, ud)
 	return q
 }
