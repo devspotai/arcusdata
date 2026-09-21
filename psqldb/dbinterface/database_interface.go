@@ -1,5 +1,7 @@
 package dbinterface
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=./database_interface.go -destination=mocks/mock_database.go -package=mocks
+
 import (
 	"context"
 
