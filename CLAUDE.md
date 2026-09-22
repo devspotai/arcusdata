@@ -116,14 +116,15 @@ path suffix is needed until `v2.0.0`.
 
 ## Known issues
 
-- **`AppendProximitySearch` passes latitude and longitude to PostGIS in the wrong
-  order.** `psqldb/querybuilder.go` emits `ST_MakePoint(latitude, longitude)`, but
-  PostGIS `ST_MakePoint(x, y)` expects **x = longitude, y = latitude**. Distance filtering
-  is therefore computed against a mirrored point. Fixing it changes query results for
-  every caller, so it needs its own release note.
-- `AppendProximitySearch` also formats its coordinates into the SQL with `%f` instead of
-  using `Param`. The values are `float64`, so this is not injectable, but it is
-  inconsistent with every other builder method.
+- `AppendProximitySearch` formats its coordinates into the SQL with `%f` instead of using
+  `Param`. The values are `float64`, so this is not injectable, but it is inconsistent
+  with every other builder method. Changing it would alter the generated SQL string and
+  break the builder tests that assert on it, so it needs its own change.
+
+The latitude/longitude argument order in `AppendProximitySearch` was wrong until it was
+corrected; `TestAppendProximitySearchAddsST_DWithin` now pins the `ST_MakePoint(lon, lat)`
+ordering. Keep that assertion — checking only that both values appear in the SQL passes
+even when the arguments are swapped.
 
 ## Don't
 

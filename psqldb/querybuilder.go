@@ -254,7 +254,8 @@ func (q *QueryBuilder) AppendProximitySearch(col string, latitude float64, longi
 				ST_SetSRID(ST_MakePoint(%f, %f), 4326)::geography,
 				%f * 1000
 			)`,
-		quotedColumn, latitude, longitude, distance,
+		// PostGIS ST_MakePoint takes (x, y) == (longitude, latitude).
+		quotedColumn, longitude, latitude, distance,
 	))
 	return q
 }

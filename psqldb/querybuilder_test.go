@@ -211,6 +211,13 @@ func TestAppendProximitySearchAddsST_DWithin(t *testing.T) {
 	if !strings.Contains(sql, fmt.Sprintf("%f", lat)) || !strings.Contains(sql, fmt.Sprintf("%f", lon)) {
 		t.Fatalf("expected coordinates in sql: %q", sql)
 	}
+	// PostGIS ST_MakePoint takes (x, y) == (longitude, latitude), so longitude
+	// must come first. Asserting only that both values appear somewhere would
+	// pass even with the arguments swapped.
+	wantPoint := fmt.Sprintf("ST_MakePoint(%f, %f)", lon, lat)
+	if !strings.Contains(sql, wantPoint) {
+		t.Fatalf("expected %q (longitude first) in sql: %q", wantPoint, sql)
+	}
 	// Proximity search does not add params
 	if len(args) != 0 {
 		t.Fatalf("expected no args from proximity search, got: %#v", args)
