@@ -14,7 +14,7 @@ import (
 	reflect "reflect"
 
 	dbinterface "github.com/devspotai/arcusdata/psqldb/dbinterface"
-	v5 "github.com/jackc/pgx/v5"
+	pgx "github.com/jackc/pgx/v5"
 	pgxpool "github.com/jackc/pgx/v5/pgxpool"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -73,7 +73,7 @@ func (mr *MockDatabaseMockRecorder) BeginFunc(ctx, fn any) *gomock.Call {
 }
 
 // BeginTx mocks base method.
-func (m *MockDatabase) BeginTx(ctx context.Context, opts v5.TxOptions) (dbinterface.Transaction, error) {
+func (m *MockDatabase) BeginTx(ctx context.Context, opts pgx.TxOptions) (dbinterface.Transaction, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BeginTx", ctx, opts)
 	ret0, _ := ret[0].(dbinterface.Transaction)
@@ -88,7 +88,7 @@ func (mr *MockDatabaseMockRecorder) BeginTx(ctx, opts any) *gomock.Call {
 }
 
 // BeginTxFunc mocks base method.
-func (m *MockDatabase) BeginTxFunc(ctx context.Context, opts v5.TxOptions, fn func(dbinterface.Transaction) error) error {
+func (m *MockDatabase) BeginTxFunc(ctx context.Context, opts pgx.TxOptions, fn func(dbinterface.Transaction) error) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BeginTxFunc", ctx, opts, fn)
 	ret0, _ := ret[0].(error)
@@ -114,7 +114,7 @@ func (mr *MockDatabaseMockRecorder) Close() *gomock.Call {
 }
 
 // CopyFrom mocks base method.
-func (m *MockDatabase) CopyFrom(ctx context.Context, tableName v5.Identifier, columnNames []string, rowSrc v5.CopyFromSource) (int64, error) {
+func (m *MockDatabase) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CopyFrom", ctx, tableName, columnNames, rowSrc)
 	ret0, _ := ret[0].(int64)
@@ -258,7 +258,7 @@ func (mr *MockDatabaseMockRecorder) QueryRow(ctx, sql any, args ...any) *gomock.
 }
 
 // SendBatch mocks base method.
-func (m *MockDatabase) SendBatch(ctx context.Context, b *v5.Batch) dbinterface.BatchResults {
+func (m *MockDatabase) SendBatch(ctx context.Context, b *pgx.Batch) dbinterface.BatchResults {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendBatch", ctx, b)
 	ret0, _ := ret[0].(dbinterface.BatchResults)
@@ -683,10 +683,10 @@ func (mr *MockBatchMockRecorder) Queue(query any, arguments ...any) *gomock.Call
 }
 
 // Underlying mocks base method.
-func (m *MockBatch) Underlying() *v5.Batch {
+func (m *MockBatch) Underlying() *pgx.Batch {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Underlying")
-	ret0, _ := ret[0].(*v5.Batch)
+	ret0, _ := ret[0].(*pgx.Batch)
 	return ret0
 }
 
