@@ -22,6 +22,22 @@ const (
 
 var identifierRegex = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+// validOps is the closed set of operators that may be interpolated into SQL.
+// Op is a string type, so callers can construct arbitrary values with Op(s);
+// anything not in this set must be rejected rather than rendered.
+var validOps = map[Op]struct{}{
+	OpEqual: {}, OpNotEqual: {}, OpGreaterThan: {}, OpLessThan: {},
+	OpIn: {}, OpLike: {}, OpILike: {}, OpGreaterThanOrEqual: {}, OpLessThanOrEqual: {},
+}
+
+// ValidateOp reports whether op is one of the defined Op constants.
+func ValidateOp(op Op) error {
+	if _, ok := validOps[op]; !ok {
+		return fmt.Errorf("unsafe SQL operator %q", string(op))
+	}
+	return nil
+}
+
 func ValidateIdentifier(name string) (string, error) {
 	if !identifierRegex.MatchString(name) {
 		return "", fmt.Errorf("invalid SQL identifier %q", name)
@@ -38,6 +54,10 @@ type CTEContext interface {
 	QuoteDottedIdentifier(name string) (string, error)
 	Err() error
 	SetErr(err error)
+	// ApplyAuthGuard attaches the EXISTS guard that references the named CTE.
+	// It exists so AuthPermissionsCTE.Apply can enforce itself instead of
+	// relying on the caller to remember a second call.
+	ApplyAuthGuard(cteName string)
 }
 
 // BuilderCore centralizes args, ctes, identifier quoting, and error handling.

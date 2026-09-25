@@ -41,6 +41,6 @@ func TestInsertBuilder_WithAuthCTE_Parameterized_WithReturningAndArgs(t *testing
 	sql, args, err := ib.Build()
 
 	assert.NoError(t, err)
-	assert.Equal(t, "WITH \"auth_cte\" AS (SELECT 1 FROM \"host_company_user_permissions\" \"p\" WHERE \"p\".\"user_id\" = $1 AND \"p\".\"host_company_id\" = $2 AND \"p\".\"permission_status\" = 'VERIFIED' AND \"p\".\"host_role\" = ANY($3)) INSERT INTO \"dest\" (\"a\", \"b\") SELECT $4, $5 WHERE EXISTS (SELECT 1 FROM \"auth_cte\") RETURNING \"id\", \"a\", \"b\"", sql)
-	assert.Equal(t, []interface{}{"user-123", "host-company-456", []string{"OWNER", "ADMIN_ALL_STAYS"}, "x", "y"}, args)
+	assert.Equal(t, "WITH \"auth_cte\" AS (SELECT 1 FROM \"host_company_user_permissions\" \"p\" WHERE \"p\".\"user_id\" = $1 AND \"p\".\"host_company_id\" = $2 AND \"p\".\"permission_status\" = $3 AND \"p\".\"host_role\" = ANY($4)) INSERT INTO \"dest\" (\"a\", \"b\") SELECT $5, $6 WHERE EXISTS (SELECT 1 FROM \"auth_cte\") RETURNING \"id\", \"a\", \"b\"", sql)
+	assert.Equal(t, []interface{}{"user-123", "host-company-456", "VERIFIED", []string{"OWNER", "ADMIN_ALL_STAYS"}, "x", "y"}, args)
 }

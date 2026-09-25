@@ -108,9 +108,9 @@ func TestDeleteBuilder_CTE_And_ReturningCols(t *testing.T) {
 	if !strings.Contains(sql, "RETURNING") {
 		t.Fatalf("expected RETURNING clause, got: %s", sql)
 	}
-	if len(args) != 4 {
-		t.Fatalf("expected 4 arguments, got: %v", args)
+	if len(args) != 5 {
+		t.Fatalf("expected 5 arguments, got: %v", args)
 	}
-	assert.Equal(t, "WITH \"auth_cte\" AS (SELECT 1 FROM \"host_company_user_permissions\" \"p\" WHERE \"p\".\"user_id\" = $1 AND \"p\".\"host_company_id\" = $2 AND \"p\".\"permission_status\" = 'VERIFIED' AND \"p\".\"host_role\" = ANY($3)) DELETE FROM \"items\" WHERE EXISTS (SELECT 1 FROM \"auth_cte\") AND \"owner_id\" = $4 RETURNING \"id\", \"name\"", sql)
-	assert.Equal(t, []any{"user-123", "host-company-456", []string{"OWNER", "ADMIN_ALL_STAYS"}, 99}, args)
+	assert.Equal(t, "WITH \"auth_cte\" AS (SELECT 1 FROM \"host_company_user_permissions\" \"p\" WHERE \"p\".\"user_id\" = $1 AND \"p\".\"host_company_id\" = $2 AND \"p\".\"permission_status\" = $3 AND \"p\".\"host_role\" = ANY($4)) DELETE FROM \"items\" WHERE EXISTS (SELECT 1 FROM \"auth_cte\") AND \"owner_id\" = $5 RETURNING \"id\", \"name\"", sql)
+	assert.Equal(t, []any{"user-123", "host-company-456", "VERIFIED", []string{"OWNER", "ADMIN_ALL_STAYS"}, 99}, args)
 }

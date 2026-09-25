@@ -23,7 +23,9 @@ safe path the default:
   refuse to build without a `WHERE` clause unless you explicitly call
   `RequireWhere(false)`.
 - **`ORDER BY` is allow-list guarded**, because it is the one clause that cannot be
-  parameterized.
+  parameterized. The allow-list is mandatory.
+- **Operators are validated against a closed set**, so the one part of a comparison that
+  is not a placeholder still cannot be attacker-controlled.
 
 ## Requirements
 
@@ -123,6 +125,10 @@ sql, args, err := psqldb.NewQueryBuilder().
 Comparison operators: `OpEqual`, `OpNotEqual`, `OpGreaterThan`, `OpLessThan`,
 `OpGreaterThanOrEqual`, `OpLessThanOrEqual`, `OpIn`, `OpLike`, `OpILike`.
 
+`Op` is a string type, so `Op(someString)` compiles. `WhereWithCondition` validates the
+operator against that closed set and records an error for anything else, so a
+user-supplied operator cannot reach the SQL.
+
 `GenerateCountSql()` reuses the accumulated `WHERE` clauses to produce the matching
 `SELECT COUNT(*)` for pagination.
 
@@ -167,15 +173,14 @@ qb.SafeOrderBy(userSuppliedCol, userSuppliedDir, allowed)
 A column outside the set records `unsafe ORDER BY column: ...` on the builder. An empty
 column string is treated as "no ordering".
 
-> **Passing `nil` as `allowedCols` skips the allow-list check entirely**, leaving only
-> identifier validation. Always pass an explicit set when the column comes from user
-> input.
+> `allowedCols` must be non-nil. Passing `nil` is an error rather than a silent skip, so
+> a sort column can never reach the query without appearing in an explicit allow-list.
 
 ## Row-level authorization
 
-`AuthPermissionsCTE` attaches a permission-check CTE to any builder and guards the
-statement with `WHERE EXISTS (SELECT 1 FROM <cte>)`, so authorization and mutation happen
-in a single statement:
+`AuthPermissionsCTE.Apply` attaches a permission-check CTE to any builder **and** adds the
+`WHERE EXISTS (SELECT 1 FROM <cte>)` guard that references it, so authorization and
+mutation happen in a single statement:
 
 ```go
 spec := psqldb.AuthPermissionsCTE{
@@ -193,6 +198,10 @@ spec := psqldb.AuthPermissionsCTE{
 }
 spec.Apply(builder) // works on any of the four builders
 ```
+
+`Apply` is self-enforcing: it adds both the CTE and the guard. Calling
+`RequireAuthCTE(spec.CTEName)` as well is harmless — the guard is applied at most once
+per CTE name.
 
 ## Transactions
 

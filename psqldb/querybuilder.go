@@ -15,6 +15,8 @@ type QueryBuilder struct {
 	limit   *int
 	offset  *int
 	orderBy string
+
+	authGuards map[string]struct{}
 }
 
 // NewQueryBuilder creates a new query builder
@@ -57,6 +59,10 @@ func (q *QueryBuilder) FromTable(table string) *QueryBuilder {
 
 func (q *QueryBuilder) WhereWithCondition(col string, val any, op Op) *QueryBuilder {
 	if q.err != nil {
+		return q
+	}
+	if err := ValidateOp(op); err != nil {
+		q.SetErr(err)
 		return q
 	}
 	cq, err := q.QuoteDottedIdentifier(col)
@@ -108,6 +114,8 @@ func (u *QueryBuilder) WhereIsNotNull(col string) *QueryBuilder {
 }
 
 // RequireAuthCTE adds EXISTS(SELECT 1 FROM "auth") to WHERE.
+// Calling it more than once for the same CTE is a no-op, so it is safe to
+// combine with AuthPermissionsCTE.Apply, which applies the guard itself.
 func (q *QueryBuilder) RequireAuthCTE(cteName string) *QueryBuilder {
 	if q.err != nil {
 		return q
@@ -117,9 +125,19 @@ func (q *QueryBuilder) RequireAuthCTE(cteName string) *QueryBuilder {
 		q.SetErr(err)
 		return q
 	}
+	if q.authGuards == nil {
+		q.authGuards = make(map[string]struct{}, 1)
+	}
+	if _, done := q.authGuards[cteQ]; done {
+		return q
+	}
+	q.authGuards[cteQ] = struct{}{}
 	q.wheres = append(q.wheres, fmt.Sprintf("EXISTS (SELECT 1 FROM %s)", cteQ))
 	return q
 }
+
+// ApplyAuthGuard satisfies CTEContext.
+func (q *QueryBuilder) ApplyAuthGuard(cteName string) { q.RequireAuthCTE(cteName) }
 
 func (q *QueryBuilder) Limit(n int) *QueryBuilder {
 	q.limit = &n
@@ -138,11 +156,15 @@ func (q *QueryBuilder) SafeOrderBy(col string, dir string, allowedCols map[strin
 		return q
 	}
 
-	if allowedCols != nil {
-		if _, ok := allowedCols[col]; !ok {
-			q.SetErr(fmt.Errorf("unsafe ORDER BY column: %q", col))
-			return q
-		}
+	// A nil allow-list used to skip this check entirely, which made a method
+	// named "Safe" silently unsafe. Require the caller to be explicit.
+	if allowedCols == nil {
+		q.SetErr(fmt.Errorf("SafeOrderBy requires a non-nil allowedCols allow-list"))
+		return q
+	}
+	if _, ok := allowedCols[col]; !ok {
+		q.SetErr(fmt.Errorf("unsafe ORDER BY column: %q", col))
+		return q
 	}
 
 	verifiedCol, err := q.QuoteIdentifier(col)
@@ -264,7 +286,18 @@ func (q *QueryBuilder) GenerateCountSql() (string, []any, error) {
 	if q.err != nil {
 		return "", nil, q.err
 	}
+	if q.from == "" {
+		return "", nil, fmt.Errorf("no FROM table")
+	}
+
 	var sb strings.Builder
+	// The CTEs must be emitted here too: the WHERE clauses copied below may
+	// reference them, and without the WITH clause the statement is invalid.
+	if len(q.ctes) > 0 {
+		sb.WriteString("WITH ")
+		sb.WriteString(strings.Join(q.ctes, ", "))
+		sb.WriteByte(' ')
+	}
 	sb.WriteString("SELECT COUNT(*) FROM ")
 	sb.WriteString(q.from)
 	if len(q.wheres) > 0 {
