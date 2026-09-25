@@ -84,7 +84,6 @@ func (spec AuthPermissionsCTE) Apply(b CTEContext) {
 
 	pUser := b.Param(spec.UserID)
 	pCo := b.Param(spec.CompanyID)
-	pRoles := b.Param(spec.AllowedRoles) // ensure your driver binds []string to text[] (pgx) or wrap upstream if using lib/pq
 
 	var sb strings.Builder
 	sb.WriteString(cteQ)
@@ -102,20 +101,31 @@ func (spec AuthPermissionsCTE) Apply(b CTEContext) {
 	sb.WriteString(pCo)
 
 	if spec.RequireVerified {
+		// Parameterized rather than hand-escaped: doubling quotes is only
+		// correct while standard_conforming_strings is on, and every other
+		// value in this library is bound as $n.
 		sb.WriteString(" AND ")
 		sb.WriteString(statusCol)
-		sb.WriteString(" = '")
-		sb.WriteString(strings.ReplaceAll(verified, `'`, `''`))
-		sb.WriteString("'")
+		sb.WriteString(" = ")
+		sb.WriteString(b.Param(verified))
 	}
 
 	sb.WriteString(" AND ")
 	sb.WriteString(roleCol)
 	sb.WriteString(" = ANY(")
-	sb.WriteString(pRoles)
+	// Allocated here so the placeholders read in the same order as the SQL.
+	// pgx binds []string to text[]; wrap upstream for other drivers.
+	sb.WriteString(b.Param(spec.AllowedRoles))
 	sb.WriteString("))")
 
 	b.AddCTE(sb.String())
+
+	// Attach the EXISTS guard as well. Adding the CTE alone defines a
+	// permission check that nothing references, so the statement would run
+	// completely unfiltered while reading at the call site as if it were
+	// guarded. The guard is idempotent, so an explicit RequireAuthCTE call
+	// by the caller remains harmless.
+	b.ApplyAuthGuard(cteName)
 }
 
 func qualify(alias, col string, b CTEContext) (string, error) {

@@ -13,6 +13,7 @@ type DeleteBuilder struct {
 	returns []string
 
 	requireWhere bool
+	authGuards   map[string]struct{}
 }
 
 func NewDeleteBuilder(table string) *DeleteBuilder {
@@ -127,6 +128,13 @@ func (d *DeleteBuilder) RequireAuthCTE(cteName string) *DeleteBuilder {
 		d.SetErr(err)
 		return d
 	}
+	if d.authGuards == nil {
+		d.authGuards = make(map[string]struct{}, 1)
+	}
+	if _, done := d.authGuards[cteQ]; done {
+		return d
+	}
+	d.authGuards[cteQ] = struct{}{}
 	d.wheres = append(d.wheres, fmt.Sprintf("EXISTS (SELECT 1 FROM %s)", cteQ))
 	return d
 }
@@ -180,3 +188,6 @@ func (d *DeleteBuilder) Build() (string, []any, error) {
 
 	return sb.String(), d.args, nil
 }
+
+// ApplyAuthGuard satisfies CTEContext.
+func (d *DeleteBuilder) ApplyAuthGuard(cteName string) { d.RequireAuthCTE(cteName) }

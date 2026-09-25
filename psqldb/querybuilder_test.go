@@ -109,8 +109,9 @@ func TestSafeOrderByValidAndInvalid(t *testing.T) {
 	q.FromTable("logs")
 	q.Limit(10)
 	q.SetOffset(10)
+	allowed := map[string]struct{}{"name": {}, "created_at": {}}
 	// valid empty dir -> ASC
-	q.SafeOrderBy("name", "", nil)
+	q.SafeOrderBy("name", "", allowed)
 	if q.err != nil {
 		t.Fatalf("unexpected error for valid orderby: %v", q.err)
 	}
@@ -125,7 +126,7 @@ func TestSafeOrderByValidAndInvalid(t *testing.T) {
 	assert.Equal(t, 0, len(args))
 	// invalid direction sets error
 	q2 := NewQueryBuilder()
-	q2.SafeOrderBy("name", "UP", nil)
+	q2.SafeOrderBy("name", "UP", allowed)
 	if q2.err == nil {
 		t.Fatalf("expected error for invalid direction")
 	}
@@ -160,7 +161,7 @@ func TestRequireAuthCTEAddsExistsClauseInQueryBuilder(t *testing.T) {
 	if !strings.Contains(sql, "EXISTS") || !strings.Contains(sql, "SELECT 1 FROM") {
 		t.Fatalf("expected EXISTS(SELECT 1 FROM ...) in sql: %q", sql)
 	}
-	assert.Equal(t, "WITH \"auth_cte\" AS (SELECT 1 FROM \"host_company_user_permissions\" \"p\" WHERE \"p\".\"user_id\" = $1 AND \"p\".\"host_company_id\" = $2 AND \"p\".\"permission_status\" = 'VERIFIED' AND \"p\".\"host_role\" = ANY($3)) SELECT \"id\" FROM \"sessions\" WHERE EXISTS (SELECT 1 FROM \"auth_cte\")", sql)
+	assert.Equal(t, "WITH \"auth_cte\" AS (SELECT 1 FROM \"host_company_user_permissions\" \"p\" WHERE \"p\".\"user_id\" = $1 AND \"p\".\"host_company_id\" = $2 AND \"p\".\"permission_status\" = $3 AND \"p\".\"host_role\" = ANY($4)) SELECT \"id\" FROM \"sessions\" WHERE EXISTS (SELECT 1 FROM \"auth_cte\")", sql)
 }
 
 func TestAppendArrayOverlapAtLeastAddsWhereAndArgs(t *testing.T) {

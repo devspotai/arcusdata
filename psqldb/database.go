@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/devspotai/arcusdata/psqldb/dbinterface"
@@ -409,38 +408,4 @@ func (db *PgxDatabase) ExecMigration(ctx context.Context, migration string) erro
 		_, err := tx.Exec(ctx, migration)
 		return err
 	})
-}
-
-func convertQuestionMarksToDollarPlaceholders(query string) string {
-	var i int
-	var result strings.Builder
-
-	for _, r := range query {
-		if r == '?' {
-			i++
-			result.WriteString(fmt.Sprintf("$%d", i))
-		} else {
-			result.WriteRune(r)
-		}
-	}
-
-	return result.String()
-}
-
-func convertQuestionMarksToDollarPlaceholdersWithOffset(sql string, offset int) string {
-	// offset = 0  => first ? becomes $1
-	// offset = 3  => first ? becomes $4, etc.
-	var b strings.Builder
-	b.Grow(len(sql) + 10)
-
-	n := offset
-	for i := 0; i < len(sql); i++ {
-		if sql[i] == '?' {
-			n++
-			b.WriteString(fmt.Sprintf("$%d", n))
-		} else {
-			b.WriteByte(sql[i])
-		}
-	}
-	return b.String()
 }

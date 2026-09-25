@@ -151,3 +151,6 @@ func (i *InsertBuilder) Build() (string, []any, error) {
 
 	return sb.String(), i.args, nil
 }
+
+// ApplyAuthGuard satisfies CTEContext.
+func (i *InsertBuilder) ApplyAuthGuard(cteName string) { i.RequireAuthCTE(cteName) }

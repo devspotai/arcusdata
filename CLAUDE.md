@@ -121,10 +121,26 @@ path suffix is needed until `v2.0.0`.
   with every other builder method. Changing it would alter the generated SQL string and
   break the builder tests that assert on it, so it needs its own change.
 
-The latitude/longitude argument order in `AppendProximitySearch` was wrong until it was
-corrected; `TestAppendProximitySearchAddsST_DWithin` now pins the `ST_MakePoint(lon, lat)`
-ordering. Keep that assertion — checking only that both values appear in the SQL passes
-even when the arguments are swapped.
+## Security invariants
+
+`psqldb/security_test.go` pins the following. Each one is a bug that was shipped at
+least once, so treat a failure there as a regression, not a stale expectation.
+
+- **`AuthPermissionsCTE.Apply` enforces its own guard.** It previously only called
+  `AddCTE`, defining a permission check that nothing referenced — the statement ran
+  unfiltered while the call site read as if it were guarded. `Apply` now also calls
+  `ApplyAuthGuard`, which is on `CTEContext` precisely so this cannot be forgotten.
+- **`RequireAuthCTE` is idempotent per CTE name** on all four builders, so `Apply` plus
+  an explicit call does not emit the predicate twice.
+- **`WhereWithCondition` validates its operator** against `validOps`. `Op` is a string
+  type, so `Op(userInput)` compiles; without the check a forged operator lands verbatim
+  in the SQL.
+- **`SafeOrderBy` requires a non-nil allow-list.** `nil` used to skip the check.
+- **`GenerateCountSql` emits the `WITH` clause**, since the WHERE clauses it copies may
+  reference the CTEs.
+- **Every value is bound as `$n`.** The verified-status literal in the auth CTE was the
+  last exception; hand-doubling quotes is only correct while
+  `standard_conforming_strings` is on.
 
 ## Don't
 

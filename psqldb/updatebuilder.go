@@ -14,6 +14,7 @@ type UpdateBuilder struct {
 	returns []string
 
 	requireWhere bool
+	authGuards   map[string]struct{}
 }
 
 func NewUpdateBuilder(table string) *UpdateBuilder {
@@ -160,6 +161,13 @@ func (u *UpdateBuilder) RequireAuthCTE(cteName string) *UpdateBuilder {
 		u.SetErr(err)
 		return u
 	}
+	if u.authGuards == nil {
+		u.authGuards = make(map[string]struct{}, 1)
+	}
+	if _, done := u.authGuards[cteQ]; done {
+		return u
+	}
+	u.authGuards[cteQ] = struct{}{}
 	u.wheres = append(u.wheres, fmt.Sprintf("EXISTS (SELECT 1 FROM %s)", cteQ))
 	return u
 }
@@ -218,3 +226,6 @@ func (u *UpdateBuilder) Build() (string, []any, error) {
 
 	return sb.String(), u.args, nil
 }
+
+// ApplyAuthGuard satisfies CTEContext.
+func (u *UpdateBuilder) ApplyAuthGuard(cteName string) { u.RequireAuthCTE(cteName) }
